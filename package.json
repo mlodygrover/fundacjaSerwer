@@ -17,5 +17,13 @@
     "url": "https://github.com/mlodygrover/fundacjaSerwer/issues"
   },
   "homepage": "https://github.com/mlodygrover/fundacjaSerwer#readme",
-  "description": ""
+  "description": "",
+  "dependencies": {
+    "cloudinary": "^1.41.3",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "mongoose": "^8.17.0",
+    "multer": "^2.0.2",
+    "multer-storage-cloudinary": "^4.0.0"
+  }
 }
