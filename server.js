@@ -208,6 +208,41 @@ app.post('/api/aktualnosci', async (req, res) => {
         res.status(500).json({ error: 'Błąd serwera przy zapisie aktualności.' });
     }
 });
+app.get('/api/aktualnosci', async (req, res) => {
+    try {
+      const aktualnosci = await Aktualnosc.find().sort({ data: -1 });
+      res.json(aktualnosci);
+    } catch (err) {
+      res.status(500).json({ error: 'Błąd podczas pobierania danych.' });
+    }
+  });
+  
+  // UPDATE
+  app.put('/api/aktualnosci/:id', async (req, res) => {
+    try {
+      const aktualnosc = await Aktualnosc.findByIdAndUpdate(req.params.id, req.body, { new: true });
+      if (!aktualnosc) {
+        return res.status(404).json({ error: 'Aktualność nie znaleziona.' });
+      }
+      res.json({ status: 'updated', data: aktualnosc });
+    } catch (err) {
+      res.status(500).json({ error: 'Błąd podczas aktualizacji.' });
+    }
+  });
+  
+  // DELETE
+  app.delete('/api/aktualnosci/:id', async (req, res) => {
+    try {
+      const aktualnosc = await Aktualnosc.findByIdAndDelete(req.params.id);
+      if (!aktualnosc) {
+        return res.status(404).json({ error: 'Nie znaleziono aktualności.' });
+      }
+      res.json({ status: 'deleted', data: aktualnosc });
+    } catch (err) {
+      res.status(500).json({ error: 'Błąd podczas usuwania.' });
+    }
+  });
+  
 
 const TekstSchema = new mongoose.Schema({
     id: { type: String, unique: true },
