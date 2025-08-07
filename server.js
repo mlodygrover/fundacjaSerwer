@@ -8,7 +8,28 @@ const PORT = 3002;
 // 🛡️ Wstaw tutaj swoje hasło do MongoDB
 const password = encodeURIComponent('Karimbenzema9');
 const mongoURI = "mongodb+srv://wiczjan:karimbenzema9@cluster0.imnx9cz.mongodb.net/baza?retryWrites=true&w=majority&appName=Cluster0";
+// --- Konfiguracja Cloudinary ---
+const { v2: cloudinary } = require('cloudinary');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+cloudinary.config({
+    cloud_name: 'dkfgniqzt',
+    api_key: '514784281515419',
+    api_secret: 'HKufkTI72D0GYIX7zvj7OmQhGao',
+});
 
+// --- Konfiguracja Multera i Cloudinary Storage ---
+const storage = new CloudinaryStorage({
+    cloudinary,
+    params: {
+        folder: 'galeria_fundacji',
+        allowed_formats: ['jpg', 'png', 'jpeg'],
+    },
+});
+const multer = require('multer');
+
+
+
+const upload = multer({ storage });
 // 🔌 Połączenie z MongoDB
 mongoose.connect(mongoURI, {
     useNewUrlParser: true,
@@ -190,59 +211,92 @@ const AktualnoscSchema = new mongoose.Schema({
 });
 
 const Aktualnosc = mongoose.model('Aktualnosc', AktualnoscSchema, 'aktualnosci'); // wymuszenie kolekcji "aktualnosci"
-app.post('/api/aktualnosci', async (req, res) => {
+// POST: Dodaj nową aktualność (z opcjonalnym zdjęciem z dysku)
+app.post('/api/aktualnosci', upload.single('zdjeciePlik'), async (req, res) => {
     try {
         const { data, tytul, tresc, zdjecie } = req.body;
 
-        if (!data || !tytul || !tresc || !zdjecie) {
+        if (!data || !tytul || !tresc) {
             return res.status(400).json({ error: 'Brakuje wymaganych danych.' });
         }
 
-        const nowaAktualnosc = new Aktualnosc({ data, tytul, tresc, zdjecie });
-        await nowaAktualnosc.save();
+        // Wybierz link z body lub z przesłanego pliku
+        const imageUrl = req.file ? req.file.path : zdjecie;
 
-        console.log('📰 Nowa aktualność dodana:', nowaAktualnosc);
+        if (!imageUrl) {
+            return res.status(400).json({ error: 'Brak zdjęcia.' });
+        }
+
+        const nowaAktualnosc = new Aktualnosc({
+            data,
+            tytul,
+            tresc,
+            zdjecie: imageUrl,
+        });
+
+        await nowaAktualnosc.save();
+        console.log('✅ Dodano nową aktualność:', nowaAktualnosc);
+
         res.status(201).json({ status: 'success', data: nowaAktualnosc });
     } catch (error) {
-        console.error('❌ Błąd przy zapisie aktualności:', error);
+        console.error('❌ Błąd podczas zapisu aktualności:', error);
         res.status(500).json({ error: 'Błąd serwera przy zapisie aktualności.' });
     }
 });
+
+// GET: Pobierz wszystkie aktualności
 app.get('/api/aktualnosci', async (req, res) => {
     try {
-      const aktualnosci = await Aktualnosc.find().sort({ data: -1 });
-      res.json(aktualnosci);
+        const aktualnosci = await Aktualnosc.find().sort({ data: -1 });
+        res.json(aktualnosci);
     } catch (err) {
-      res.status(500).json({ error: 'Błąd podczas pobierania danych.' });
+        res.status(500).json({ error: 'Błąd podczas pobierania danych.' });
     }
-  });
-  
-  // UPDATE
-  app.put('/api/aktualnosci/:id', async (req, res) => {
+});
+
+// PUT: Edytuj aktualność (z opcjonalnym nowym zdjęciem)
+app.put('/api/aktualnosci/:id', upload.single('zdjeciePlik'), async (req, res) => {
     try {
-      const aktualnosc = await Aktualnosc.findByIdAndUpdate(req.params.id, req.body, { new: true });
-      if (!aktualnosc) {
-        return res.status(404).json({ error: 'Aktualność nie znaleziona.' });
-      }
-      res.json({ status: 'updated', data: aktualnosc });
+        const { data, tytul, tresc, zdjecie } = req.body;
+        const aktualnosc = await Aktualnosc.findById(req.params.id);
+
+        if (!aktualnosc) {
+            return res.status(404).json({ error: 'Aktualność nie znaleziona.' });
+        }
+
+        // Zaktualizuj dane
+        aktualnosc.data = data || aktualnosc.data;
+        aktualnosc.tytul = tytul || aktualnosc.tytul;
+        aktualnosc.tresc = tresc || aktualnosc.tresc;
+
+        // Jeśli przesłano nowe zdjęcie z dysku, zastąp stare
+        if (req.file) {
+            aktualnosc.zdjecie = req.file.path;
+        } else if (zdjecie) {
+            aktualnosc.zdjecie = zdjecie;
+        }
+
+        await aktualnosc.save();
+        res.json({ status: 'updated', data: aktualnosc });
     } catch (err) {
-      res.status(500).json({ error: 'Błąd podczas aktualizacji.' });
+        console.error('❌ Błąd przy aktualizacji:', err);
+        res.status(500).json({ error: 'Błąd podczas aktualizacji.' });
     }
-  });
-  
-  // DELETE
-  app.delete('/api/aktualnosci/:id', async (req, res) => {
+});
+
+// DELETE: Usuń aktualność
+app.delete('/api/aktualnosci/:id', async (req, res) => {
     try {
-      const aktualnosc = await Aktualnosc.findByIdAndDelete(req.params.id);
-      if (!aktualnosc) {
-        return res.status(404).json({ error: 'Nie znaleziono aktualności.' });
-      }
-      res.json({ status: 'deleted', data: aktualnosc });
+        const aktualnosc = await Aktualnosc.findByIdAndDelete(req.params.id);
+        if (!aktualnosc) {
+            return res.status(404).json({ error: 'Nie znaleziono aktualności.' });
+        }
+        res.json({ status: 'deleted', data: aktualnosc });
     } catch (err) {
-      res.status(500).json({ error: 'Błąd podczas usuwania.' });
+        res.status(500).json({ error: 'Błąd podczas usuwania.' });
     }
-  });
-  
+});
+
 
 const TekstSchema = new mongoose.Schema({
     id: { type: String, unique: true },
@@ -442,9 +496,11 @@ const relacjaSchema = new mongoose.Schema({
 });
 
 const Relacja = mongoose.model('Relacja', relacjaSchema, 'relacje');
-app.post("/api/relacje", async (req, res) => {
+app.post("/api/relacje", upload.single("zdjecie"), async (req, res) => {
     try {
-        const nowaRelacja = new Relacja(req.body);
+        const { tytul, data, opis } = req.body;
+        const zdjecie = req.file?.path;
+        const nowaRelacja = new Relacja({ tytul, data, opis, zdjecie });
         const saved = await nowaRelacja.save();
         res.status(201).json(saved);
     } catch (err) {
@@ -452,7 +508,6 @@ app.post("/api/relacje", async (req, res) => {
     }
 });
 
-// Pobierz wszystkie relacje
 app.get("/api/relacje", async (req, res) => {
     try {
         const relacje = await Relacja.find().sort({ data: -1 });
@@ -462,7 +517,6 @@ app.get("/api/relacje", async (req, res) => {
     }
 });
 
-// Usuń relację
 app.delete("/api/relacje/:id", async (req, res) => {
     try {
         await Relacja.findByIdAndDelete(req.params.id);
@@ -472,12 +526,15 @@ app.delete("/api/relacje/:id", async (req, res) => {
     }
 });
 
-// Zaktualizuj relację
-app.put("/api/relacje/:id", async (req, res) => {
+app.put("/api/relacje/:id", upload.single("zdjecie"), async (req, res) => {
     try {
-        const updated = await Relacja.findByIdAndUpdate(req.params.id, req.body, {
-            new: true,
-        });
+        const { tytul, data, opis } = req.body;
+        const zdjecie = req.file?.path || req.body.zdjecie;
+        const updated = await Relacja.findByIdAndUpdate(
+            req.params.id,
+            { tytul, data, opis, zdjecie },
+            { new: true }
+        );
         res.json(updated);
     } catch (err) {
         res.status(400).json({ error: "Błąd aktualizacji relacji", details: err });
@@ -488,78 +545,59 @@ app.put("/api/relacje/:id", async (req, res) => {
 
 
 
-const multer = require('multer');
-const { v2: cloudinary } = require('cloudinary');
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
 
 
 
-// --- Konfiguracja Cloudinary ---
-cloudinary.config({
-  cloud_name: 'dkfgniqzt',
-  api_key: '514784281515419',
-  api_secret: 'HKufkTI72D0GYIX7zvj7OmQhGao',
-});
-
-// --- Konfiguracja Multera i Cloudinary Storage ---
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: 'galeria_fundacji',
-    allowed_formats: ['jpg', 'png', 'jpeg'],
-  },
-});
-const upload = multer({ storage });
 
 // --- Model MongoDB ---
 const galleryPhotoSchema = new mongoose.Schema({
-  imageUrl: String,
-  cloudinaryId: String,
-  description: String,
-  createdAt: { type: Date, default: Date.now },
+    imageUrl: String,
+    cloudinaryId: String,
+    description: String,
+    createdAt: { type: Date, default: Date.now },
 });
 const GalleryPhoto = mongoose.model('GalleryPhoto', galleryPhotoSchema);
 
 // --- Endpointy API ---
 // Pobierz wszystkie zdjęcia
 app.get('/api/gallery', async (req, res) => {
-  try {
-    const photos = await GalleryPhoto.find().sort({ createdAt: -1 });
-    res.json(photos);
-  } catch (err) {
-    res.status(500).json({ error: 'Błąd pobierania zdjęć.' });
-  }
+    try {
+        const photos = await GalleryPhoto.find().sort({ createdAt: -1 });
+        res.json(photos);
+    } catch (err) {
+        res.status(500).json({ error: 'Błąd pobierania zdjęć.' });
+    }
 });
 
 // Dodaj zdjęcie
 app.post('/api/gallery', upload.single('image'), async (req, res) => {
-  try {
-    const newPhoto = new GalleryPhoto({
-      imageUrl: req.file.path,
-      cloudinaryId: req.file.filename,
-      description: req.body.description || '',
-    });
-    await newPhoto.save();
-    res.status(201).json(newPhoto);
-  } catch (err) {
-    res.status(500).json({ error: 'Błąd dodawania zdjęcia.' });
-  }
+    try {
+        const newPhoto = new GalleryPhoto({
+            imageUrl: req.file.path,
+            cloudinaryId: req.file.filename,
+            description: req.body.description || '',
+        });
+        await newPhoto.save();
+        res.status(201).json(newPhoto);
+    } catch (err) {
+        res.status(500).json({ error: 'Błąd dodawania zdjęcia.' });
+    }
 });
 
 // Usuń zdjęcie
 app.delete('/api/gallery/:id', async (req, res) => {
-  try {
-    const photo = await GalleryPhoto.findById(req.params.id);
-    if (!photo) {
-      return res.status(404).json({ error: 'Nie znaleziono zdjęcia.' });
-    }
+    try {
+        const photo = await GalleryPhoto.findById(req.params.id);
+        if (!photo) {
+            return res.status(404).json({ error: 'Nie znaleziono zdjęcia.' });
+        }
 
-    await cloudinary.uploader.destroy(photo.cloudinaryId);
-    await photo.deleteOne();
-    res.json({ message: 'Usunięto zdjęcie.' });
-  } catch (err) {
-    res.status(500).json({ error: 'Błąd usuwania zdjęcia.' });
-  }
+        await cloudinary.uploader.destroy(photo.cloudinaryId);
+        await photo.deleteOne();
+        res.json({ message: 'Usunięto zdjęcie.' });
+    } catch (err) {
+        res.status(500).json({ error: 'Błąd usuwania zdjęcia.' });
+    }
 });
 
 
